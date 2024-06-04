@@ -1,0 +1,40 @@
+ip: '192.168.46.50' #crate IP address
+crate_path: /home/nfs/pastika/Downloads/net-snmp-5.9.4/mibs #path to the crate MIBs
+ramp_rate: 10 #V/s global ramp and deramp rates
+fall_rate: 50 #V/s global fall rate
+lappds_in_use: ['0','1'] #labels for the LAPPDs in use, referencing the settings below
+debug: True #debug mode for the python program, will only print commands, not execute (for now)
+
+#settings for lappd 0
+l0:
+
+  #SETPOINTS:
+  #You can change these within the file, save, and "re-load" within the
+  #python program and it will reparse the setpoints as new targets. 
+  #Based on the divider spreadsheet on the LAPPD google drive, both LAPPDs
+  #and both HV circuit configurations result in the same voltage setpoints
+  #for roughly the same MCP voltage drops (slight differences)
+  set_v: {'pc': 2100, 'mcp1': 2100, 'mcp2': 1050} #~850V per plate
+  #set_v: {'pc': 2210, 'mcp1': 2200, 'mcp2': 1100} #~900V per plate
+  #set_v: {'pc': 0, 'mcp1': 0, 'mcp2': 0} #Convenient ramp down to 0V
+
+
+  max_v: {'pc': 2400, 'mcp1': 2300, 'mcp2': 1200} #software maxima for the voltages
+  #Below is the operation current limiter, so we can set this based on expectations
+  #from the spice simulation of the divider. If you operate with a parallel resistance
+  #to the MCPs, then the current settings should be different. 
+  #The photocathode supply should not draw more than 10 uA, unless being clamped
+  #by the zener (i.e. 200V above the MCP1). Units are in amps
+  #max_i = {'pc': 10e-6, 'mcp1':600e-6, 'mcp2': 300e-6}  #for parallel config
+  max_i: {'pc': 10e-6, 'mcp1': 200e-6, 'mcp2': 100e-6} #for series config
+
+
+#l1 
+l1:
+  set_v: {'pc': 2100, 'mcp1': 2100, 'mcp2': 1050} #~850V per plate
+  #set_v: {'pc': 2210, 'mcp1': 2200, 'mcp2': 1100} #~900V per plate
+  #set_v: {'pc': 0, 'mcp1': 0, 'mcp2': 0} #Convenient ramp down to 0V
+
+  max_v: {'pc': 2400, 'mcp1': 2300, 'mcp2': 1200} #software maxima for the voltages
+  #max_i = {'pc': 10e-6, 'mcp1':600e-6, 'mcp2': 300e-6}  #for parallel config
+  max_i: {'pc': 10e-6, 'mcp1': 200e-6, 'mcp2': 100e-6} #for series config
