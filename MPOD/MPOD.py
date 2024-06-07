@@ -33,7 +33,7 @@ class MPOD:
             subprocess.run(command, shell=True)
 
         #set the fall rate for the new channel in V/s
-        command = self.get_common(guru=True) + "outputVoltageRiseRate." + ch_key + " F {:.3f}".format(fall_rate)
+        command = self.get_common(guru=True) + "outputVoltageFallRate." + ch_key + " F {:.3f}".format(fall_rate)
         if(self.debug):
             print(command)
         else:
@@ -55,11 +55,24 @@ class MPOD:
                 return
             cmd_to_exec = self.get_common(guru=True) + "outputVoltage." + ch_key + " F {:.3f}".format(argument)
         
-        elif(command == "groupsSwitch"):
+        elif(command == "sysMainSwitch"):
             if(argument != 0 and argument != 1):
-                print("Error: groupsSwitch command requires argument 0 or 1")
+                print("Error: sysMainSwitch command requires argument 0 or 1")
                 return
-            cmd_to_exec = self.get_common(guru=True) + "groupsSwitch.{:d}".format(self.mod_num) + " i {:d}".format(argument)
+            cmd_to_exec = self.get_common(guru=True) + "sysMainSwitch.0 i {:d}".format(argument)
+
+        elif(command == "outputSwitch"):
+            if(argument != 0 and argument != 1):
+                print("Error: outputSwitch command requires argument 0 or 1")
+                return
+            cmd_to_exec = self.get_common(guru=True) + "outputSwitch." + ch_key + " i {:d}".format(argument)
+
+        else:
+            print("Error: command '{}' not recognized".format(command))
+            return
+
+
+
 
         if(self.debug):
             print(cmd_to_exec)
