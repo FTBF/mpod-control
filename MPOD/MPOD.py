@@ -23,21 +23,21 @@ class MPOD:
         if(self.debug):
             print(command)
         else:
-            subprocess.run(command.split(' '), shell=True)  
+            subprocess.run(command, shell=True)  
 
         #set the ramp rate for the new channel in V/s
         command = self.get_common(guru=True) + "outputVoltageRiseRate." + ch_key + " F {:.3f}".format(ramp_rate)
         if(self.debug):
             print(command)
         else:
-            subprocess.run(command.split(' '), shell=True)
+            subprocess.run(command, shell=True)
 
         #set the fall rate for the new channel in V/s
         command = self.get_common(guru=True) + "outputVoltageRiseRate." + ch_key + " F {:.3f}".format(fall_rate)
         if(self.debug):
             print(command)
         else:
-            subprocess.run(command.split(' '), shell=True)
+            subprocess.run(command, shell=True)
 
         self.chs.append(ch_int)
 
@@ -64,13 +64,13 @@ class MPOD:
         if(self.debug):
             print(cmd_to_exec)
         else:
-            subprocess.run(cmd_to_exec.split(' '), shell=True)
+            subprocess.run(cmd_to_exec, shell=True)
 
 
 
     #there is a common string for all commands.
     def get_common(self, guru=False):
-        output = "snmpget -Oqv -v 2c -M " + self.path + " -m +WIENER-CRATE-MIB -c "
+        output = "snmpset -Oqv -v 2c -M " + self.path + " -m +WIENER-CRATE-MIB -c "
         if(guru):
             output += "guru "
         else:
