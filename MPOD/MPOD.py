@@ -19,21 +19,21 @@ class MPOD:
         #set current limit for new channel
         #channel key string
         ch_key = "u" + str(self.mod_num) + str(ch_int).zfill(2)
-        command = self.get_common(guru=True) + "outputCurrent." + ch_key + " F {:.9f}".format(max_current)
+        command = self.get_common(com="guru") + "outputCurrent." + ch_key + " F {:.9f}".format(max_current)
         if(self.debug):
             print(command)
         else:
             subprocess.run(command, shell=True)  
 
         #set the ramp rate for the new channel in V/s
-        command = self.get_common(guru=True) + "outputVoltageRiseRate." + ch_key + " F {:.3f}".format(ramp_rate)
+        command = self.get_common(com="guru") + "outputVoltageRiseRate." + ch_key + " F {:.3f}".format(ramp_rate)
         if(self.debug):
             print(command)
         else:
             subprocess.run(command, shell=True)
 
         #set the fall rate for the new channel in V/s
-        command = self.get_common(guru=True) + "outputVoltageFallRate." + ch_key + " F {:.3f}".format(fall_rate)
+        command = self.get_common(com="guru") + "outputVoltageFallRate." + ch_key + " F {:.3f}".format(fall_rate)
         if(self.debug):
             print(command)
         else:
@@ -53,19 +53,19 @@ class MPOD:
             if(argument < 0 or argument > 2400):
                 print("Error: output voltage must be between 0 and 2400")
                 return
-            cmd_to_exec = self.get_common(guru=True) + "outputVoltage." + ch_key + " F {:.3f}".format(argument)
+            cmd_to_exec = self.get_common(com="guru") + "outputVoltage." + ch_key + " F {:.3f}".format(argument)
         
         elif(command == "sysMainSwitch"):
             if(argument != 0 and argument != 1):
                 print("Error: sysMainSwitch command requires argument 0 or 1")
                 return
-            cmd_to_exec = self.get_common(guru=True) + "sysMainSwitch.0 i {:d}".format(argument)
+            cmd_to_exec = self.get_common(com="private") + "sysMainSwitch.0 i {:d}".format(argument)
 
         elif(command == "outputSwitch"):
             if(argument != 0 and argument != 1):
                 print("Error: outputSwitch command requires argument 0 or 1")
                 return
-            cmd_to_exec = self.get_common(guru=True) + "outputSwitch." + ch_key + " i {:d}".format(argument)
+            cmd_to_exec = self.get_common(com="guru") + "outputSwitch." + ch_key + " i {:d}".format(argument)
 
         else:
             print("Error: command '{}' not recognized".format(command))
@@ -82,12 +82,8 @@ class MPOD:
 
 
     #there is a common string for all commands.
-    def get_common(self, guru=False):
-        output = "snmpset -Oqv -v 2c -M " + self.path + " -m +WIENER-CRATE-MIB -c "
-        if(guru):
-            output += "guru "
-        else:
-            output += "public "
+    def get_common(self, com="guru"):
+        output = "snmpset -Oqv -v2c  -M " + self.path + " -m +WIENER-CRATE-MIB -c " + com + " "
 
         output += str(self.ip) + " " 
         

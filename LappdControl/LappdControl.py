@@ -29,6 +29,8 @@ class LappdControl:
         #whether the channel are outputting voltage. Turn the crate on. 
 
         self.is_on = False #flag for whether the channels are on or off
+        self.load_new_setpoints() #load the setpoints from the settings file
+        
 
         
     def load_settings(self):

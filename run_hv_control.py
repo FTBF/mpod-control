@@ -33,6 +33,7 @@ class HVControlGUI(QWidget):
         self.emerg_button.clicked.connect(self.emergency_off)
 
         self.lc = LappdControl.LappdControl(sys.argv[-1])
+        
 
     def load_setpoints(self):
         self.lc.load_new_setpoints()
