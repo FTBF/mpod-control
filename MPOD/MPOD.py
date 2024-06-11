@@ -62,8 +62,8 @@ class MPOD:
             cmd_to_exec = self.get_common(com="private") + "sysMainSwitch.0 i {:d}".format(argument)
 
         elif(command == "outputSwitch"):
-            if(argument != 0 and argument != 1):
-                print("Error: outputSwitch command requires argument 0 or 1")
+            if(argument != 0 and argument != 1 and argument != 10):
+                print("Error: outputSwitch command requires argument 0 or 1 or 10")
                 return
             cmd_to_exec = self.get_common(com="guru") + "outputSwitch." + ch_key + " i {:d}".format(argument)
 

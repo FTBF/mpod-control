@@ -152,6 +152,7 @@ class LappdControl:
         
         for ch in self.channel_dict:
             ch_key = self.channel_dict[ch]
+            self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 1, ch_key=ch_key)
 
         self.is_on = True
@@ -162,6 +163,7 @@ class LappdControl:
         
         for ch in self.channel_dict:
             ch_key = self.channel_dict[ch]
+            self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 0, ch_key=ch_key)
 
         self.is_on = False
