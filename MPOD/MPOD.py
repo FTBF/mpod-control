@@ -67,13 +67,6 @@ class MPOD:
                 return
             cmd_to_exec = self.get_common(com="guru") + "outputSwitch." + ch_key + " i {:d}".format(argument)
 
-        elif(command == "outputMeasurementTerminalVoltage"):
-            #argument can be anything
-            if(ch_key is None):
-                print("Error: outputMeasurementTerminalVoltage command requires a channel key")
-                return
-            cmd_to_exec = self.get_common(com="public") + "outputMeasurementTerminalVoltage." + ch_key
-            
         else:
             print("Error: command '{}' not recognized".format(command))
             return
@@ -84,8 +77,7 @@ class MPOD:
         if(self.debug):
             print(cmd_to_exec)
         else:
-            result = subprocess.run(cmd_to_exec, shell=True, capture_output = True, text = True)
-            return result.stdout
+            subprocess.run(cmd_to_exec, shell=True)
 
 
 
