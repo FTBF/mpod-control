@@ -100,7 +100,10 @@ class MPOD:
 
     #there is a common string for all commands.
     def get_common(self, com="guru"):
-        output = "snmpset -Oqv -v2c  -M " + self.path + " -m +WIENER-CRATE-MIB -c " + com + " "
+        if(com == "public"):
+            output = "snmpget -Oqv -v2c  -M " + self.path + " -m +WIENER-CRATE-MIB -c " + com + " "
+        else:
+            output = "snmpset -Oqv -v2c  -M " + self.path + " -m +WIENER-CRATE-MIB -c " + com + " "
 
         output += str(self.ip) + " " 
         

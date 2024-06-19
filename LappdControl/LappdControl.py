@@ -21,7 +21,7 @@ class LappdControl:
         
         #initialize the MPOD crate
         self.mpod = None #the module object where commands are parsed and sent. 
-        self.channel_dict = {} #our own dictionary of channel numbers and names
+        self.channel_dict = {} #our own dictionary of channel numbers, names, current voltages, setpoint voltages, etc. 
         self.initialize_crate() #initializes the full stack of channels. also populates self.mpod with MPOD object
 
         
@@ -72,13 +72,16 @@ class LappdControl:
             max_i = s[lnum]['max_i'] #dictionary of max currents for each channel
             if(ch % 3 == 0):
                 mpod.add_channel(ch, max_current=float(max_i['pc']), ramp_rate=float(s["ramp_rate"]), fall_rate=float(s["fall_rate"]))
-                self.channel_dict['{}_pc'.format(lnum)] = 'u{:d}'.format(mn) + str(ch).zfill(2)
+                self.channel_dict['{}_pc'.format(lnum)] = {}
+                self.channel_dict['{}_pc'.format(lnum)]["uid"] = 'u{:d}'.format(mn) + str(ch).zfill(2)
             elif(ch % 3 == 1):
                 mpod.add_channel(ch, max_current=float(max_i['mcp1']), ramp_rate=float(s["ramp_rate"]), fall_rate=float(s["fall_rate"]))
-                self.channel_dict['{}_mcp1'.format(lnum)] = 'u{:d}'.format(mn) + str(ch).zfill(2)
+                self.channel_dict['{}_mcp1'.format(lnum)] = {}
+                self.channel_dict['{}_mcp1'.format(lnum)]["uid"] = 'u{:d}'.format(mn) + str(ch).zfill(2)
             else:
                 mpod.add_channel(ch, max_current=float(max_i['mcp2']), ramp_rate=float(s["ramp_rate"]), fall_rate=float(s["fall_rate"]))
-                self.channel_dict['{}_mcp2'.format(lnum)] = 'u{:d}'.format(mn) + str(ch).zfill(2)
+                self.channel_dict['{}_mcp2'.format(lnum)] = {}
+                self.channel_dict['{}_mcp2'.format(lnum)]["uid"] = 'u{:d}'.format(mn) + str(ch).zfill(2)
                 lappd_count +=1
 
         self.mpod = mpod
@@ -128,7 +131,7 @@ class LappdControl:
             lappd = ch.split('_')[0]
             vtap = ch.split('_')[1]
             setp = float(self.settings[lappd]["set_v"][vtap])
-            self.mpod.execute_command('outputVoltage', setp, ch_key=self.channel_dict[ch])
+            self.mpod.execute_command('outputVoltage', setp, ch_key=self.channel_dict[ch]["uid"])
     
 
     #With these channel on/off functions, Evan was trying
@@ -140,13 +143,13 @@ class LappdControl:
     #The manual is not clear enough!
     def channels_on(self):
         for ch in self.channel_dict:
-            ch_key = self.channel_dict[ch]
+            ch_key = self.channel_dict[ch]["uid"]
             self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 1, ch_key=ch_key)
 
     def channels_off(self):
         for ch in self.channel_dict:
-            ch_key = self.channel_dict[ch]
+            ch_key = self.channel_dict[ch]["uid"]
             self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 0, ch_key=ch_key)
 
@@ -169,11 +172,10 @@ class LappdControl:
                 output += "\t" + v + " : " + str(self.settings[l]["set_v"][v]) + " V\n"
             
         return output
-    
 
     def get_current_voltages(self):
         #function is in testing... so only doing one channel. 
-        result = self.mpod.execute_command("outputMeasurementTerminalVoltage", 0, ch_key=self.channel_dict["l1_pc"])
+        result = self.mpod.execute_command("outputMeasurementTerminalVoltage", ch_key=self.channel_dict["l1_pc"]["uid"])
         f = open("test_output_for_evan.txt", "a")
 
         f.write(result)
@@ -181,8 +183,23 @@ class LappdControl:
 
         f.close()
 
+
+    #in development until we fully get some test outputs from the test function above. 
+    def load_terminal_voltages_dev(self):
+        for ch in self.channel_dict:
+            result = self.mpod.execute_command("outputMeasurementTerminalVoltage", ch_key=self.channel_dict[ch]["uid"])
+            #assumes result is "WIENER-CRATE-MIB::outputVoltage.u0 = Opaque: Float: 123.000000 V"
+            volt_str = result.split(" ")[-2]
+            try:
+                volts = float(volt_str)
+            except:
+                print("Had issue with string parsing of current voltage in get_current_voltages")
+                continue
+            self.channel_dict[ch]["v_term"] = volts
+        
+
     def read_onoff_states(self):
-        result = self.mpod.execute_command("outputSwitch", ch_key=self.channel_dict["l1_pc"])
+        result = self.mpod.execute_command("outputSwitch", ch_key=self.channel_dict["l1_pc"]["uid"])
         f = open("test_output_for_evan.txt", "a")
         f.write(result)
         f.write("\n")
@@ -191,3 +208,16 @@ class LappdControl:
         f.write(result)
         f.write("\n")
         f.close()
+
+    def load_switch_states_dev(self):
+        for ch in self.channel_dict:
+            result = self.mpod.execute_command("outputSwitch", ch_key=self.channel_dict[ch]["uid"])
+            #assumes result is "WIENER-CRATE-MIB::outputVoltage.u0 = Opaque: Float: 123.000000 V"
+            state_str = result.split(" ")[-1]
+            try:
+                state = int(state_str)
+            except:
+                print("Had issue with string parsing of current voltage in get_current_voltages")
+                continue
+            self.channel_dict[ch]["state"] = state
+
