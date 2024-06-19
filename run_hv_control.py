@@ -50,7 +50,7 @@ class HVControlGUI(QWidget):
 
         self.text_output.append("------------------------\nJust started HV control program. We have not loaded new setpoints yet. We have reconfigured current limits and ramp rates. The channels may even be on! But feel free to press the `Channels ON' button to resend that command either way.\n--------------------\n\n")
         
-        self.test_button_for_evan.clicked.connect(self.lc.get_current_voltages)
+        self.test_button_for_evan.clicked.connect(self.test)
         
     def load_setpoints(self):
         self.lc.load_new_setpoints()
@@ -91,6 +91,10 @@ class HVControlGUI(QWidget):
     def emergency_off(self):
         self.lc.emergency_off()
         self.text_output.append("Emergency off button pressed!! You will now have to physically go to the MPOD and turn it back on.")
+
+    def test(self):
+        self.lc.read_onoff_states()
+        self.lc.get_current_voltages()
 
 if __name__ == "__main__":
     if(len(sys.argv) < 2):

@@ -44,28 +44,37 @@ class MPOD:
 
     #we only use a few commands, this function will parse
     #them and use the appropriate snmp settings and such. 
-    def execute_command(self, command, argument, ch_key=None):
+    def execute_command(self, command, argument = None, ch_key=None):
         cmd_to_exec = None 
         if(command == "outputVoltage"):
             if(ch_key is None):
                 print("Error: outputVoltage command requires a channel key")
                 return
-            if(argument < 0 or argument > 2400):
-                print("Error: output voltage must be between 0 and 2400")
-                return
-            cmd_to_exec = self.get_common(com="guru") + "outputVoltage." + ch_key + " F {:.3f}".format(argument)
+            if(argument != None):
+                if(argument < 0 or argument > 2400):
+                    print("Error: output voltage must be between 0 and 2400")
+                    return
+                cmd_to_exec = self.get_common(com="guru") + "outputVoltage." + ch_key + " F {:.3f}".format(argument)
+            else:
+                cmd_to_exec = self.get_common(com="public") + "outputVoltage." + ch_key
         
         elif(command == "sysMainSwitch"):
-            if(argument != 0 and argument != 1):
+            if(argument is None):
+                cmd_to_exec = self.get_common(com="public") + "sysMainSwitch.0"
+            elif(argument != 0 and argument != 1):
                 print("Error: sysMainSwitch command requires argument 0 or 1")
                 return
-            cmd_to_exec = self.get_common(com="private") + "sysMainSwitch.0 i {:d}".format(argument)
+            else:
+                cmd_to_exec = self.get_common(com="private") + "sysMainSwitch.0 i {:d}".format(argument)
 
         elif(command == "outputSwitch"):
-            if(argument != 0 and argument != 1 and argument != 10):
+            if(argument is None):
+                cmd_to_exec = self.get_common(com="public") + "outputSwitch." + ch_key
+            elif(argument != 0 and argument != 1 and argument != 10):
                 print("Error: outputSwitch command requires argument 0 or 1 or 10")
                 return
-            cmd_to_exec = self.get_common(com="guru") + "outputSwitch." + ch_key + " i {:d}".format(argument)
+            else:
+                cmd_to_exec = self.get_common(com="guru") + "outputSwitch." + ch_key + " i {:d}".format(argument)
 
         elif(command == "outputMeasurementTerminalVoltage"):
             #argument can be anything
@@ -73,13 +82,13 @@ class MPOD:
                 print("Error: outputMeasurementTerminalVoltage command requires a channel key")
                 return
             cmd_to_exec = self.get_common(com="public") + "outputMeasurementTerminalVoltage." + ch_key
-            
+
         else:
             print("Error: command '{}' not recognized".format(command))
             return
 
-
-
+        if(cmd_to_exec == None):
+            return
 
         if(self.debug):
             print(cmd_to_exec)

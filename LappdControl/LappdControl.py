@@ -174,6 +174,20 @@ class LappdControl:
     def get_current_voltages(self):
         #function is in testing... so only doing one channel. 
         result = self.mpod.execute_command("outputMeasurementTerminalVoltage", 0, ch_key=self.channel_dict["l1_pc"])
-        f = open("test_output_for_evan.txt", "w")
+        f = open("test_output_for_evan.txt", "a")
+
         f.write(result)
+        f.write("\n")
+
+        f.close()
+
+    def read_onoff_states(self):
+        result = self.mpod.execute_command("outputSwitch", ch_key=self.channel_dict["l1_pc"])
+        f = open("test_output_for_evan.txt", "a")
+        f.write(result)
+        f.write("\n")
+
+        result = self.mpod.execute_command("sysMainSwitch")
+        f.write(result)
+        f.write("\n")
         f.close()
