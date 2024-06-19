@@ -24,14 +24,6 @@ class LappdControl:
         self.channel_dict = {} #our own dictionary of channel numbers and names
         self.initialize_crate() #initializes the full stack of channels. also populates self.mpod with MPOD object
 
-        #Evan believes that the crate can be in the "off" state 
-        #without the user knowing. And this "off" state is not
-        #whether the channel are outputting voltage. Turn the crate on. 
-
-        self.is_on = False #flag for whether the channels are on or off
-        self.load_new_setpoints() #load the setpoints from the settings file
-        
-
         
     def load_settings(self):
         self.settings = None
@@ -147,30 +139,25 @@ class LappdControl:
     #'groupsSwitch' to work, and so for now we will use the loop. 
     #The manual is not clear enough!
     def channels_on(self):
-        if(self.is_on):
-            return
-        
         for ch in self.channel_dict:
             ch_key = self.channel_dict[ch]
             self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 1, ch_key=ch_key)
 
-        self.is_on = True
-    
     def channels_off(self):
-        if(self.is_on == False):
-            return 
-        
         for ch in self.channel_dict:
             ch_key = self.channel_dict[ch]
             self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 0, ch_key=ch_key)
 
-        self.is_on = False
+    def photocathode_on(self):
+        pass
+
+    def photocathode_off(self):
+        pass
 
     def emergency_off(self):
         self.mpod.execute_command("sysMainSwitch", 0)
-        self.is_on = False
 
     def get_string_setpoints(self):
         output = ""
@@ -182,3 +169,11 @@ class LappdControl:
                 output += "\t" + v + " : " + str(self.settings[l]["set_v"][v]) + " V\n"
             
         return output
+    
+
+    def get_current_voltages(self):
+        #function is in testing... so only doing one channel. 
+        result = self.mpod.execute_command("outputMeasurementTerminalVoltage", 0, ch_key=self.channel_dict["l1_pc"])
+        f = open("test_output_for_evan.txt", "w")
+        f.write(result)
+        f.close()
