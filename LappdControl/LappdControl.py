@@ -7,7 +7,6 @@ from MPOD import MPOD
 from ipaddress import IPv4Address
 
 
-
 class LappdControl:
     def __init__(self, settings):
         self.settings = None
@@ -86,6 +85,9 @@ class LappdControl:
 
         self.mpod = mpod
 
+        #get the statuses of channel voltages and on/off states
+        self.load_terminal_voltages_dev()
+        self.load_switch_states_dev()
 
     def check_setpoints_sanity(self):
         #check the setpoints and make sure that they are within reason
@@ -118,7 +120,8 @@ class LappdControl:
         
         return True
 
-    def load_new_setpoints(self):
+    #l is the lnum of the lappd looking to be loaded
+    def load_new_setpoints(self, l):
         #first load the settings file again
         self.load_settings()
 
@@ -127,51 +130,45 @@ class LappdControl:
             return
 
         #then update the setpoints for each channel
+        #on the requested LAPPD
         for ch in self.channel_dict:
             lappd = ch.split('_')[0]
+            if(lappd != "l"+l):
+                continue
             vtap = ch.split('_')[1]
             setp = float(self.settings[lappd]["set_v"][vtap])
             self.mpod.execute_command('outputVoltage', setp, ch_key=self.channel_dict[ch]["uid"])
+            self.channel_dict[ch]["set_v"] = setp
     
 
-    #With these channel on/off functions, Evan was trying
-    #to avoid having to loop through every channel and
-    #send different snmp commands for each one. Imagine
-    #snmp has an error in the middle of the loop or something... 
-    #then half the channels remain on. But... I cant get
-    #'groupsSwitch' to work, and so for now we will use the loop. 
-    #The manual is not clear enough!
-    def channels_on(self):
+    #Turns channels on for a given LAPPD, 
+    #ramping them to their setpoint voltages. 
+    def channels_on(self, l):
         for ch in self.channel_dict:
+            lappd = ch.split('_')[0]
+            if(lappd != "l"+l):
+                continue
             ch_key = self.channel_dict[ch]["uid"]
             self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 1, ch_key=ch_key)
 
-    def channels_off(self):
+    def channels_off(self, l):
         for ch in self.channel_dict:
+            lappd = ch.split('_')[0]
+            if(lappd != "l"+l):
+                continue
             ch_key = self.channel_dict[ch]["uid"]
             self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 0, ch_key=ch_key)
 
-    def photocathode_on(self):
+    def photocathode_on(self, l):
         pass
 
-    def photocathode_off(self):
+    def photocathode_off(self, l):
         pass
 
     def emergency_off(self):
         self.mpod.execute_command("sysMainSwitch", 0)
-
-    def get_string_setpoints(self):
-        output = ""
-        ls = ["l" + _ for _ in self.settings["lappds_in_use"]]
-        vtaps = ["pc", "mcp1", "mcp2"]
-        for l in ls:
-            output += l + ":\n"
-            for v in vtaps:
-                output += "\t" + v + " : " + str(self.settings[l]["set_v"][v]) + " V\n"
-            
-        return output
 
     def get_current_voltages(self):
         #function is in testing... so only doing one channel. 
@@ -188,7 +185,10 @@ class LappdControl:
     def load_terminal_voltages_dev(self):
         for ch in self.channel_dict:
             result = self.mpod.execute_command("outputMeasurementTerminalVoltage", ch_key=self.channel_dict[ch]["uid"])
-            #assumes result is "WIENER-CRATE-MIB::outputVoltage.u0 = Opaque: Float: 123.000000 V"
+
+            if(self.settings["debug"]):
+                result = "WIENER-CRATE-MIB::outputVoltage.u0 = Opaque: Float: 123.000000 V"
+            
             volt_str = result.split(" ")[-2]
             try:
                 volts = float(volt_str)
@@ -211,13 +211,18 @@ class LappdControl:
 
     def load_switch_states_dev(self):
         for ch in self.channel_dict:
-            result = self.mpod.execute_command("outputSwitch", ch_key=self.channel_dict[ch]["uid"])
-            #assumes result is "WIENER-CRATE-MIB::outputVoltage.u0 = Opaque: Float: 123.000000 V"
-            state_str = result.split(" ")[-1]
-            try:
-                state = int(state_str)
-            except:
-                print("Had issue with string parsing of current voltage in get_current_voltages")
-                continue
-            self.channel_dict[ch]["state"] = state
+            result = self.mpod.execute_command("outputStatus", ch_key=self.channel_dict[ch]["uid"])
+            #assumes result is ""80 20 " /* outputOn, outputCurrentLimited */""
+            if(self.settings["debug"]):
+                result = "\"80 20 \" /* outputOn, outputCurrentLimited */"
+
+            if("On" in result):
+                self.channel_dict[ch]["state"] = 1
+            elif("Off" in result):
+                self.channel_dict[ch]["state"] = 0
+            else:
+                print("Could not tell status of the channel, parsing issue in load_switch_states_dev")
+                self.channel_dict[ch]["state"] = -1
+
+
 

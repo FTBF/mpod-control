@@ -1,100 +1,91 @@
 import sys
 sys.path.append("LappdControl/")
 from LappdControl import LappdControl
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QTextEdit, QGridLayout
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QGridLayout, QSpacerItem, QSizePolicy, QRadioButton
 
 
 class HVControlGUI(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("HV Control")
-        self.resize(600, 400)
+        self.setWindowTitle("Control of LAPPD HV supplies in FTBF")
+        #self.resize(600, 800)
         self.layout = QGridLayout()
-        self.button_load_setpoints = QPushButton("Load New Setpoints")
-        self.on_button = QPushButton("Channels ON")
-        self.off_button = QPushButton("Channels OFF")
-        self.on_button.setCheckable(True)
-
-        self.pc_on_button = QPushButton("Photocathode ON")
-        self.pc_off_button = QPushButton("Photocathode OFF")
-        self.test_button_for_evan = QPushButton("Test Button for Evan")
-
-        self.text_output = QTextEdit() #output for messages
-    
-        #emergency off button
-        self.emerg_button = QPushButton("Emergency Off")
-        self.emerg_button.setStyleSheet("background-color: #f5877f; border-radius: 50px; border: 2px solid black")  # Modified line
-          
-
-        #connections to functions
-        self.button_load_setpoints.clicked.connect(self.load_setpoints)
-        self.on_button.clicked.connect(self.toggle_channels_on)
-        self.off_button.clicked.connect(self.toggle_channels_off)
-        self.emerg_button.clicked.connect(self.emergency_off)
-        self.pc_on_button.clicked.connect(self.toggle_pc_on)
-        self.pc_off_button.clicked.connect(self.toggle_pc_off)
-        
-
-        #move buttons around
-        self.layout.addWidget(self.on_button, 0, 0)
-        self.layout.addWidget(self.off_button, 0, 1)
-        self.layout.addWidget(self.pc_on_button, 1, 0)
-        self.layout.addWidget(self.pc_off_button, 1, 1)
-        self.layout.addWidget(self.button_load_setpoints, 2, 0)
-        self.layout.addWidget(self.text_output, 3, 0)
-        self.layout.addWidget(self.emerg_button, 4, 0)  
-        self.layout.addWidget(self.test_button_for_evan, 5, 0)
-        self.setLayout(self.layout)
+        self.layout.setSpacing(0)
 
         self.lc = LappdControl.LappdControl(sys.argv[-1])
 
-        self.text_output.append("------------------------\nJust started HV control program. We have not loaded new setpoints yet. We have reconfigured current limits and ramp rates. The channels may even be on! But feel free to press the `Channels ON' button to resend that command either way.\n--------------------\n\n")
+        lnums = self.lc.settings["lappds_in_use"]
+        #buttons for each LAPPD column
+        self.ch_on_buttons = {}
+        self.ch_off_buttons = {}
+        self.pc_on_buttons = {}
+        self.pc_off_buttons = {}
+        self.load_setpoints_buttons = {}
+        self.ch_status_buttons = {}
+        offset = 3 #how many columns dedicated for each LAPPD
+        for i, l in enumerate(lnums):
+            self.layout.addWidget(QLabel("LAPPD {}".format(l)), 0, 0 + i*offset)
+            self.ch_on_buttons[l] = QPushButton("Channels ON")
+            self.ch_on_buttons[l].clicked.connect(lambda _, x=l: self.channels_on(x))
+            self.layout.addWidget(self.ch_on_buttons[l], 1, 0 + i*offset)
+            self.ch_off_buttons[l] = QPushButton("Channels OFF")
+            self.ch_off_buttons[l].clicked.connect(lambda _, x=l: self.channels_off(x))
+            self.layout.addWidget(self.ch_off_buttons[l], 1, 1 + i*offset)
+            self.pc_on_buttons[l] = QPushButton("Photocathode ON")
+            self.pc_on_buttons[l].clicked.connect(lambda _, x=l: self.photocathode_on(x))
+            self.layout.addWidget(self.pc_on_buttons[l], 2, 0 + i*offset)
+            self.pc_off_buttons[l] = QPushButton("Photocathode OFF")
+            self.pc_off_buttons[l].clicked.connect(lambda _, x=l: self.photocathode_off(x))
+            self.layout.addWidget(self.pc_off_buttons[l], 2, 1 + i*offset)
+            self.load_setpoints_buttons[l] = QPushButton("Load New Setpoints")
+            self.load_setpoints_buttons[l].clicked.connect(lambda _, x=l: self.load_new_setpoints(x))
+            self.layout.addWidget(self.load_setpoints_buttons[l], 3, 0 + i*offset)
+            self.ch_status_buttons[l] = QPushButton("Read Channels")
+            self.ch_status_buttons[l].clicked.connect(lambda _, x=l: self.read_channels(x))
+            self.layout.addWidget(self.ch_status_buttons[l], 3, 1 + i*offset)
+            self.layout.addItem(QSpacerItem(80, 40, QSizePolicy.Minimum, QSizePolicy.Expanding),0, 2 + i*offset)
+            
+
+        #emergency off button
+        self.emerg_button = QPushButton("Emergency Off")
+        self.emerg_button.setStyleSheet("background-color: #f5877f; border-radius: 50px; border: 2px solid black")  # Modified line
+        self.layout.addWidget(self.emerg_button, 0, len(lnums)*offset)
+        self.emerg_button.clicked.connect(self.emergency_off)
+
+        self.setLayout(self.layout)
+
         
-        self.test_button_for_evan.clicked.connect(self.test)
-        
-    def load_setpoints(self):
-        self.lc.load_new_setpoints()
-        # Add your code here to load new setpoints
-        self.text_output.append("New setpoints loaded from file:")
-        self.text_output.append(self.lc.get_string_setpoints())
+    def load_new_setpoints(self, l):
+        self.lc.load_new_setpoints(l)
 
-
-    def toggle_channels_on(self):
-        # Add your code here to toggle ON / OFF
-        self.off_button.setStyleSheet("")
-        self.on_button.setStyleSheet("background-color: green")
-        self.text_output.append("Channels are now ACTIVELY going to setpoints")
-        self.lc.channels_on()
+    def channels_on(self, l):
+        self.ch_off_buttons[l].setStyleSheet("")
+        self.ch_on_buttons[l].setStyleSheet("background-color: green")
+        self.lc.channels_on(l)
     
-    def toggle_channels_off(self):
-        #deactivate the on button
-        self.on_button.setStyleSheet("")
-        self.off_button.setStyleSheet("background-color: green")
-        self.text_output.append("Channels are now off and resetting to 0V as gracefully as possible")
-        self.lc.channels_off()
+    def channels_off(self, l):
+        self.ch_on_buttons[l].setStyleSheet("")
+        self.ch_off_buttons[l].setStyleSheet("background-color: green")
+        self.lc.channels_off(l)
 
-
-    def toggle_pc_on(self):
-        # Add your code here to toggle ON / OFF
-        self.pc_off_button.setStyleSheet("")
-        self.pc_on_button.setStyleSheet("background-color: green")
-        self.text_output.append("Photocathode has been set to ON")
-        self.lc.photocathode_on()
+    def photocathode_on(self, l):
+        self.pc_off_buttons[l].setStyleSheet("")
+        self.pc_on_buttons[l].setStyleSheet("background-color: green")
+        self.lc.photocathode_on(l)
     
-    def toggle_pc_off(self):
-        #deactivate the on button
-        self.pc_on_button.setStyleSheet("")
-        self.pc_off_button.setStyleSheet("background-color: green")
-        self.text_output.append("Photocathode is now ramping off")
-        self.lc.photocathode_off()
+    def photocathode_off(self, l):
+        self.pc_on_buttons[l].setStyleSheet("")
+        self.pc_off_buttons[l].setStyleSheet("background-color: green")
+        self.lc.photocathode_on(l)
 
     def emergency_off(self):
         self.lc.emergency_off()
-        self.text_output.append("Emergency off button pressed!! You will now have to physically go to the MPOD and turn it back on.")
 
-    def test(self):
-        self.lc.read_onoff_states()
-        self.lc.get_current_voltages()
+    #reads all of the data that we want to display on the GUI
+    #such as channel on/off status, setpoint voltages, and terminal voltages
+    def read_channels(self, l):
+        pass
+
 
 if __name__ == "__main__":
     if(len(sys.argv) < 2):

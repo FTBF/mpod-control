@@ -3,11 +3,11 @@ crate_path: /home/nfs/pastika/Downloads/net-snmp-5.9.4/mibs #path to the crate M
 snmp_path: /home/nfs/pastika/Downloads/net-snmp-5.9.4/apps #path to the snmp commands
 ramp_rate: 10 #V/s global ramp and deramp rates
 fall_rate: 50 #V/s global fall rate
-lappds_in_use: ['0','1'] #labels for the LAPPDs in use, referencing the settings below
+lappds_in_use: ['86','157'] #labels for the LAPPDs in use, referencing the settings below
 debug: True #debug mode for the python program, will only print commands, not execute (for now)
 
-#settings for lappd 0
-l0:
+#LAPPD settings for 86
+l86:
 
   #SETPOINTS:
   #You can change these within the file, save, and "re-load" within the
@@ -30,8 +30,7 @@ l0:
   max_i: {'pc': 10e-6, 'mcp1': 200e-6, 'mcp2': 100e-6} #for series config
 
 
-#l1 
-l1:
+l157:
   set_v: {'pc': 2100, 'mcp1': 2100, 'mcp2': 1050} #~850V per plate
   #set_v: {'pc': 2210, 'mcp1': 2200, 'mcp2': 1100} #~900V per plate
   #set_v: {'pc': 0, 'mcp1': 0, 'mcp2': 0} #Convenient ramp down to 0V
