@@ -20,7 +20,23 @@ class LappdControl:
         
         #initialize the MPOD crate
         self.mpod = None #the module object where commands are parsed and sent. 
+
+        #this channel dict is where most information is stored. It holds a lot. The keys are:
+        #"l<n>_pc"/mcp1/mcp2 for channel selection, which itself holds a dictionary with these keys:
+        #"uid" - the unique identifier for the channel in the MPOD system
+        #"v_term" - the terminal voltage of the channel
+        #"set_v" - the set voltage of the channel
+        #"state" - the on/off state of the channel
+        #***ALL VOLTAGES IN SOFTWARE ARE POSITIVE, as we assume the supply always is negative, even with messages of positive voltages
         self.channel_dict = {} #our own dictionary of channel numbers, names, current voltages, setpoint voltages, etc. 
+
+        #this dictionary is more for global LAPPD statuses and data, such as whether the photocathoe
+        #voltage setpoint is set to on, or below the mcp1. Each lnum is a key, like lappd_dict['157'] = {}
+        #with keys:
+        #"pc_state" - whether the photocathode is on or off
+        self.lappd_dict = {} #dictionary of LAPPD statuses, such as whether the photocathode is on or off.
+        for lappd in self.settings['lappds_in_use']:
+            self.lappd_dict[lappd] = {}
         self.initialize_crate() #initializes the full stack of channels. also populates self.mpod with MPOD object
 
         
@@ -85,9 +101,16 @@ class LappdControl:
 
         self.mpod = mpod
 
-        #get the statuses of channel voltages and on/off states
-        self.load_terminal_voltages_dev()
-        self.load_switch_states_dev()
+        #get the statuses of channel voltages and on/off states, 
+        #and ALSO reads whether the photocathode is on or off. 
+        self.read_terminal_voltages()
+        self.read_setpoint_voltages()
+        self.read_switch_states()
+
+        #if the channels are on and such, the GUI will now reflect that. 
+        #Check whether the voltage of the photocathode is set to be above or below mcp1
+        for l in self.settings['lappds_in_use']:
+            self.lappd_dict[l]["pc_state"] = self.is_photocathode_on(l)
 
     def check_setpoints_sanity(self):
         #check the setpoints and make sure that they are within reason
@@ -162,67 +185,118 @@ class LappdControl:
             self.mpod.execute_command("outputSwitch", 0, ch_key=ch_key)
 
     def photocathode_on(self, l):
-        pass
+        #check first if the photocathode is already on
+        if(self.is_photocathode_on(l)):
+            return
+        
+        ch = "l"+l+"_pc"
+        ch_key = self.channel_dict[ch]["uid"]
+        #raise the setpoint to the photocathode voltage from the settings file
+        self.load_settings()
+        setp = float(self.settings["l"+l]["set_v"]["pc"])
+        self.mpod.execute_command("outputVoltage", setp, ch_key=ch_key)
+        self.channel_dict[ch]["set_v"] = setp
+        self.lappd_dict[l]["pc_state"] = 1
+
 
     def photocathode_off(self, l):
-        pass
+        #check first if the photocathode is already off
+        if(self.is_photocathode_on(l) == False):
+            return
+
+        ch = "l"+l+"_pc"
+        ch_key = self.channel_dict[ch]["uid"]
+        #lower the setpoint to the MCP1 voltage from the settings file
+        #MINUS some small negative bias of -0.5V
+        self.load_settings()
+        setp = float(self.settings["l"+l]["set_v"]["mcp1"]) + float(self.settings["pc_off_bias"]) #This number is negative in the config file
+        self.mpod.execute_command("outputVoltage", setp, ch_key=ch_key)
+        self.channel_dict[ch]["set_v"] = setp
+        self.lappd_dict[l]["pc_state"] = 0
 
     def emergency_off(self):
         self.mpod.execute_command("sysMainSwitch", 0)
 
-    def get_current_voltages(self):
-        #function is in testing... so only doing one channel. 
-        result = self.mpod.execute_command("outputMeasurementTerminalVoltage", ch_key=self.channel_dict["l1_pc"]["uid"])
-        f = open("test_output_for_evan.txt", "a")
-
-        f.write(result)
-        f.write("\n")
-
-        f.close()
-
-
     #in development until we fully get some test outputs from the test function above. 
-    def load_terminal_voltages_dev(self):
+    def read_terminal_voltages(self):
         for ch in self.channel_dict:
             result = self.mpod.execute_command("outputMeasurementTerminalVoltage", ch_key=self.channel_dict[ch]["uid"])
 
             if(self.settings["debug"]):
-                result = "WIENER-CRATE-MIB::outputVoltage.u0 = Opaque: Float: 123.000000 V"
+                result = "-123.000000 V"
             
             volt_str = result.split(" ")[-2]
             try:
-                volts = float(volt_str)
+                volts = abs(float(volt_str)) #we absolute value because in software we will work with positives only
             except:
                 print("Had issue with string parsing of current voltage in get_current_voltages")
                 continue
             self.channel_dict[ch]["v_term"] = volts
-        
 
-    def read_onoff_states(self):
-        result = self.mpod.execute_command("outputSwitch", ch_key=self.channel_dict["l1_pc"]["uid"])
-        f = open("test_output_for_evan.txt", "a")
-        f.write(result)
-        f.write("\n")
 
-        result = self.mpod.execute_command("sysMainSwitch")
-        f.write(result)
-        f.write("\n")
-        f.close()
-
-    def load_switch_states_dev(self):
+    #THIS IS a critical distinction where you read the setpoint
+    #voltages from the machine, rather than "loading" setpoint voltages from our
+    #config file. The resulting setpoint goes into the same data structure location,
+    #but whenever a setpoint is "set" by the user, it loads new setpoints from file. 
+    def read_setpoint_voltages(self):
         for ch in self.channel_dict:
-            result = self.mpod.execute_command("outputStatus", ch_key=self.channel_dict[ch]["uid"])
-            #assumes result is ""80 20 " /* outputOn, outputCurrentLimited */""
-            if(self.settings["debug"]):
-                result = "\"80 20 \" /* outputOn, outputCurrentLimited */"
+            result = self.mpod.execute_command("outputVoltage", ch_key=self.channel_dict[ch]["uid"])
 
-            if("On" in result):
+            if(self.settings["debug"]):
+                result = "-123.000000 V"
+            
+            volt_str = result.split(" ")[-2]
+            try:
+                volts = abs(float(volt_str)) #we absolute value because in software we will work with positives only
+            except:
+                print("Had issue with string parsing of current voltage in read_setpoint_voltages")
+                continue
+            self.channel_dict[ch]["set_v"] = volts
+
+    def read_switch_states(self):
+        for ch in self.channel_dict:
+            result = self.mpod.execute_command("outputSwitch", ch_key=self.channel_dict[ch]["uid"])
+            #assumes result is "on or ff"
+            if(self.settings["debug"]):
+                result = "off"
+
+            if("on" in result.lower()):
                 self.channel_dict[ch]["state"] = 1
-            elif("Off" in result):
+            elif("off" in result.lower()):
                 self.channel_dict[ch]["state"] = 0
             else:
-                print("Could not tell status of the channel, parsing issue in load_switch_states_dev")
+                print("Could not tell status of the channel, parsing issue in load_switch_states")
                 self.channel_dict[ch]["state"] = -1
 
+    #simple boolean for the GUI to check if channels are on for a given LAPPD
+    def are_channels_on(self, l, check=True):
+        if(check):
+            self.read_switch_states()
+        for ch in self.channel_dict:
+            lappd = ch.split('_')[0]
+            if(lappd != "l"+l):
+                continue
+            if(self.channel_dict[ch]["state"] == 0):
+                return False
+        return True
 
+    #this function now is checking if the photocathode Voltage
+    #is set to be above or below~equal to mcp1, not whether the switch is on. 
+    #If you know you just read terminal voltages, then you can set check to False
+    #and it wont read again. 
+    def is_photocathode_on(self, l, check=True):
+        if(check):
+            self.read_setpoint_voltages()
+
+        for ch in self.channel_dict:
+            lappd = ch.split('_')[0]
+            if(lappd != "l"+l):
+                continue
+            if(ch.split('_')[1] == "pc"):
+                if(self.channel_dict[ch]["set_v"] > self.channel_dict["l"+l+"_mcp1"]["set_v"]):
+                    return True
+                else:
+                    return False
+
+        return None #if something wrong happens
 

@@ -40,9 +40,9 @@ class HVControlGUI(QWidget):
             self.load_setpoints_buttons[l] = QPushButton("Load New Setpoints")
             self.load_setpoints_buttons[l].clicked.connect(lambda _, x=l: self.load_new_setpoints(x))
             self.layout.addWidget(self.load_setpoints_buttons[l], 3, 0 + i*offset)
-            self.ch_status_buttons[l] = QPushButton("Read Channels")
-            self.ch_status_buttons[l].clicked.connect(lambda _, x=l: self.read_channels(x))
-            self.layout.addWidget(self.ch_status_buttons[l], 3, 1 + i*offset)
+            #self.ch_status_buttons[l] = QPushButton("Read Channels")
+            #self.ch_status_buttons[l].clicked.connect(lambda _, x=l: self.read_channels(x))
+            #self.layout.addWidget(self.ch_status_buttons[l], 3, 1 + i*offset)
             self.layout.addItem(QSpacerItem(80, 40, QSizePolicy.Minimum, QSizePolicy.Expanding),0, 2 + i*offset)
             
 
@@ -53,6 +53,17 @@ class HVControlGUI(QWidget):
         self.emerg_button.clicked.connect(self.emergency_off)
 
         self.setLayout(self.layout)
+
+        #initialize the button statuses (green or grey depending on what the state of channels are)
+        for l in lnums:
+            if(self.lc.are_channels_on(l, check=False)):
+                self.ch_on_buttons[l].setStyleSheet("background-color: green")
+            else:
+                self.ch_off_buttons[l].setStyleSheet("background-color: green")
+            if(self.lc.is_photocathode_on(l, check=False)):
+                self.pc_on_buttons[l].setStyleSheet("background-color: green")
+            else:
+                self.pc_off_buttons[l].setStyleSheet("background-color: green")
 
         
     def load_new_setpoints(self, l):
@@ -76,7 +87,7 @@ class HVControlGUI(QWidget):
     def photocathode_off(self, l):
         self.pc_on_buttons[l].setStyleSheet("")
         self.pc_off_buttons[l].setStyleSheet("background-color: green")
-        self.lc.photocathode_on(l)
+        self.lc.photocathode_off(l)
 
     def emergency_off(self):
         self.lc.emergency_off()

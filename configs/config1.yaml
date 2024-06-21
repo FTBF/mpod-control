@@ -5,6 +5,9 @@ ramp_rate: 10 #V/s global ramp and deramp rates
 fall_rate: 50 #V/s global fall rate
 lappds_in_use: ['86','157'] #labels for the LAPPDs in use, referencing the settings below
 debug: True #debug mode for the python program, will only print commands, not execute (for now)
+#when the photocathode is set to "off", we reverse bias it relative to the MCP1 
+#as even with very small voltages, it is easy to get some photoelectrons. 
+pc_off_bias: -0.5 #Volts
 
 #LAPPD settings for 86
 l86:
@@ -15,7 +18,7 @@ l86:
   #Based on the divider spreadsheet on the LAPPD google drive, both LAPPDs
   #and both HV circuit configurations result in the same voltage setpoints
   #for roughly the same MCP voltage drops (slight differences)
-  set_v: {'pc': 2100, 'mcp1': 2100, 'mcp2': 1050} #~850V per plate
+  set_v: {'pc': 2150, 'mcp1': 2100, 'mcp2': 1050} #~850V per plate
   #set_v: {'pc': 2210, 'mcp1': 2200, 'mcp2': 1100} #~900V per plate
   #set_v: {'pc': 0, 'mcp1': 0, 'mcp2': 0} #Convenient ramp down to 0V
 
@@ -31,7 +34,7 @@ l86:
 
 
 l157:
-  set_v: {'pc': 2100, 'mcp1': 2100, 'mcp2': 1050} #~850V per plate
+  set_v: {'pc': 2150, 'mcp1': 2100, 'mcp2': 1050} #~850V per plate
   #set_v: {'pc': 2210, 'mcp1': 2200, 'mcp2': 1100} #~900V per plate
   #set_v: {'pc': 0, 'mcp1': 0, 'mcp2': 0} #Convenient ramp down to 0V
 
