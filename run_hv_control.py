@@ -1,7 +1,7 @@
 import sys
 sys.path.append("LappdControl/")
 from LappdControl import LappdControl
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QGridLayout, QSpacerItem, QSizePolicy, QRadioButton
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QGridLayout, QSpacerItem, QSizePolicy, QTextEdit
 
 
 class HVControlGUI(QWidget):
@@ -12,7 +12,8 @@ class HVControlGUI(QWidget):
         self.layout = QGridLayout()
         self.layout.setSpacing(0)
 
-        self.lc = LappdControl.LappdControl(sys.argv[-1])
+        self.text_output = QTextEdit() #GUI text terminal gets passed to LC object. 
+        self.lc = LappdControl.LappdControl(sys.argv[-1], self.text_output)
 
         lnums = self.lc.settings["lappds_in_use"]
         #buttons for each LAPPD column
@@ -49,8 +50,11 @@ class HVControlGUI(QWidget):
         #emergency off button
         self.emerg_button = QPushButton("Emergency Off")
         self.emerg_button.setStyleSheet("background-color: #f5877f; border-radius: 50px; border: 2px solid black")  # Modified line
-        self.layout.addWidget(self.emerg_button, 0, len(lnums)*offset)
+        self.layout.addWidget(self.emerg_button, 0, len(lnums)*offset-1)
         self.emerg_button.clicked.connect(self.emergency_off)
+
+        #Text output
+        self.layout.addWidget(self.text_output, 5, 0, 1, 5)
 
         self.setLayout(self.layout)
 
@@ -65,32 +69,75 @@ class HVControlGUI(QWidget):
             else:
                 self.pc_off_buttons[l].setStyleSheet("background-color: green")
 
+
+        #startup message
+        self.text_output.append("Welcome to the LAPPD HV Control GUI")
+        self.text_output.append("The config file that was loaded has the following settings:")
+        for l in lnums:
+            self.text_output.append("LAPPD {}: ".format(l))
+            pc_config = float(self.lc.settings["l"+l]["set_v"]["pc"])
+            mcp1_config = float(self.lc.settings["l"+l]["set_v"]["mcp1"])
+            mcp2_config = float(self.lc.settings["l"+l]["set_v"]["mcp2"])
+            self.text_output.append("  Setpoints in config file:\t\t PC {:.0f}V,\t MCP1 {:.0f},\t MCP2 {:.0f}".format(pc_config, mcp1_config, mcp2_config))
+            pc_mpod = float(self.lc.channel_dict["l"+l+"_pc"]["set_v"])
+            mcp1_mpod = float(self.lc.channel_dict["l"+l+"_mcp1"]["set_v"])
+            mcp2_mpod = float(self.lc.channel_dict["l"+l+"_mcp2"]["set_v"])
+            self.text_output.append("  Setpoints loaded on the MPOD:\t PC {:.0f}V,\t MCP1 {:.0f},\t MCP2 {:.0f}".format(pc_mpod, mcp1_mpod, mcp2_mpod))
+            pc_mpod = float(self.lc.channel_dict["l"+l+"_pc"]["v_term"])
+            mcp1_mpod = float(self.lc.channel_dict["l"+l+"_mcp1"]["v_term"])
+            mcp2_mpod = float(self.lc.channel_dict["l"+l+"_mcp2"]["v_term"])
+            self.text_output.append("  Terminal voltages on MPOD:\t PC {:.0f}V,\t MCP1 {:.0f},\t MCP2 {:.0f}".format(pc_mpod, mcp1_mpod, mcp2_mpod))
+            self.text_output.append("  Channels are presently {}".format("ON" if self.lc.are_channels_on(l) else "OFF"))
         
     def load_new_setpoints(self, l):
-        self.lc.load_new_setpoints(l)
+        retval = self.lc.load_new_setpoints(l)
+        if(retval):
+            self.text_output.append("New setpoints loaded for LAPPD {}:".format(l))
+            pc_mpod = float(self.lc.channel_dict["l"+l+"_pc"]["set_v"])
+            mcp1_mpod = float(self.lc.channel_dict["l"+l+"_mcp1"]["set_v"])
+            mcp2_mpod = float(self.lc.channel_dict["l"+l+"_mcp2"]["set_v"])
+            self.text_output.append("\tPC {:.0f}V,\t MCP1 {:.0f},\t MCP2 {:.0f}".format(pc_mpod, mcp1_mpod, mcp2_mpod))
+        else:
+            self.text_output.append("Error: New setpoints could not be loaded for LAPPD {}".format(l))
+            self.text_output.append("Check the terminal for more information as to why")
 
     def channels_on(self, l):
         self.ch_off_buttons[l].setStyleSheet("")
         self.ch_on_buttons[l].setStyleSheet("background-color: green")
-        self.lc.channels_on(l)
+        retval = self.lc.channels_on(l)
+        if(retval):
+            self.text_output.append("Channels turned on for LAPPD {}".format(l))
+        else:
+            self.text_output.append("The channels were already on! So we did nothing. If you want to load new setpoints, click the button below.")
     
     def channels_off(self, l):
         self.ch_on_buttons[l].setStyleSheet("")
         self.ch_off_buttons[l].setStyleSheet("background-color: green")
-        self.lc.channels_off(l)
+        retval = self.lc.channels_off(l)
+        if(retval):
+            self.text_output.append("Channels turned off for LAPPD {}".format(l))
+        else:
+            self.text_output.append("The channels were already off! So we did nothing.")
 
     def photocathode_on(self, l):
         self.pc_off_buttons[l].setStyleSheet("")
-        self.pc_on_buttons[l].setStyleSheet("background-color: green")
-        self.lc.photocathode_on(l)
+        retval = self.lc.photocathode_on(l)
+        if(retval):
+            self.text_output.append("Photocathode turned on for LAPPD {}".format(l))
+            self.pc_on_buttons[l].setStyleSheet("background-color: green")
+        else:
+            self.text_output.append("Error: Photocathode could not be turned on for LAPPD {}".format(l))
+            self.text_output.append("Check the terminal for more information as to why")
     
     def photocathode_off(self, l):
         self.pc_on_buttons[l].setStyleSheet("")
         self.pc_off_buttons[l].setStyleSheet("background-color: green")
         self.lc.photocathode_off(l)
+        self.text_output.append("Photocathode turned off for LAPPD {}".format(l))
 
     def emergency_off(self):
         self.lc.emergency_off()
+        self.text_output.append("!!!Emergency of has been sent!!! You'll now have to physically switch the module back on.")
 
     #reads all of the data that we want to display on the GUI
     #such as channel on/off status, setpoint voltages, and terminal voltages

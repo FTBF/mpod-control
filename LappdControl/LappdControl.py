@@ -8,9 +8,10 @@ from ipaddress import IPv4Address
 
 
 class LappdControl:
-    def __init__(self, settings):
+    def __init__(self, settings, guitext):
         self.settings = None
         self.settings_filename = settings
+        self.guitext = guitext
         self.load_settings() #load the settings file
 
         #need to check and set environment variables to tell
@@ -150,7 +151,7 @@ class LappdControl:
 
         if(self.check_setpoints_sanity() == False):
             print("Failed sanity check on setpoints, not loading new setpoints")
-            return
+            return False
 
         #then update the setpoints for each channel
         #on the requested LAPPD
@@ -160,13 +161,35 @@ class LappdControl:
                 continue
             vtap = ch.split('_')[1]
             setp = float(self.settings[lappd]["set_v"][vtap])
-            self.mpod.execute_command('outputVoltage', setp, ch_key=self.channel_dict[ch]["uid"])
-            self.channel_dict[ch]["set_v"] = setp
-    
+
+            #we are going to have some conditions for if the PC is on verses off. 
+            if(vtap == "pc" and self.lappd_dict[l]["pc_state"] == 0):
+                setp = float(self.settings["l"+l]["set_v"]["mcp1"]) + float(self.settings["pc_off_bias"])
+                self.mpod.execute_command('outputVoltage', setp, ch_key=self.channel_dict[ch]["uid"])
+                self.channel_dict[ch]["set_v"] = setp 
+            else:
+                self.mpod.execute_command('outputVoltage', setp, ch_key=self.channel_dict[ch]["uid"])
+                self.channel_dict[ch]["set_v"] = setp
+        
+        return True
 
     #Turns channels on for a given LAPPD, 
     #ramping them to their setpoint voltages. 
     def channels_on(self, l):
+        #first, check that the channels are off. If they are on, do nothing! just a repeat click. 
+        if(self.are_channels_on(l)):
+            return False
+        
+        #Channels are off. So we will establish a ramp up procedure that sequences
+        #the MCPs and PC in order. 
+        mcp2_temp = self.channel_dict["l"+l+"_mcp2"]["set_v"]
+        mcp1_temp = mcp2_temp
+        pc_temp = mcp2_temp
+
+        #first ramp to the mcp2 voltage for all terminals
+        self.mpod.execute_command("outputVoltage", mcp2_temp, ch_key=self.channel_dict["l"+l+"_mcp2"]["uid"])
+        self.mpod.execute_command("outputVoltage", mcp1_temp, ch_key=self.channel_dict["l"+l+"_mcp1"]["uid"])
+        self.mpod.execute_command("outputVoltage", pc_temp, ch_key=self.channel_dict["l"+l+"_pc"]["uid"])
         for ch in self.channel_dict:
             lappd = ch.split('_')[0]
             if(lappd != "l"+l):
@@ -175,7 +198,129 @@ class LappdControl:
             self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 1, ch_key=ch_key)
 
+        #this should take a few seconds based on ramp rate, so wait that many seconds + 5
+        tramp = mcp2_temp/float(self.settings["ramp_rate"]) + 4 #seconds
+        print("Ramping all terminals first to MCP2 voltage, this will take {} seconds".format(tramp))
+        for i in range(int(tramp)):
+            if(i % 2 == 0):
+                print("{}...".format(i))
+            time.sleep(1)
+        time.sleep(1)
+
+        #check the terminal voltages have made it there
+        self.read_terminal_voltages()
+        error_allowed = 5 #V 
+        for ch in self.channel_dict:
+            lappd = ch.split('_')[0]
+            if(lappd != "l"+l):
+                continue
+            if(abs(self.channel_dict[ch]["v_term"] - mcp2_temp) > error_allowed):
+                print("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
+                self.guitext.append("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
+                self.guitext.append("I suggest you turn the channels off and try again.")
+                return False
+            
+        #now ramp the other two to mcp1 
+        mcp1_temp = self.channel_dict["l"+l+"_mcp1"]["set_v"]
+        pc_temp = mcp1_temp
+        self.mpod.execute_command("outputVoltage", mcp1_temp, ch_key=self.channel_dict["l"+l+"_mcp1"]["uid"])
+        self.mpod.execute_command("outputVoltage", pc_temp, ch_key=self.channel_dict["l"+l+"_pc"]["uid"])
+        #this should take a few seconds based on ramp rate, so wait that many seconds + 5
+        tramp = (mcp1_temp - mcp2_temp)/float(self.settings["ramp_rate"]) + 4 #seconds
+        print("Ramping MCP1 and PC to the MCP1 voltage, this will take {} seconds".format(tramp))
+        for i in range(int(tramp)):
+            if(i % 2 == 0):
+                print("{}...".format(i))
+            time.sleep(1)
+        time.sleep(1)
+
+        #check the terminal voltages have made it there
+        self.read_terminal_voltages()
+        error_allowed = 5 #V 
+        for ch in self.channel_dict:
+            lappd = ch.split('_')[0]
+            if(lappd != "l"+l):
+                continue
+            if("mcp2" in ch):
+                continue
+            if(abs(self.channel_dict[ch]["v_term"] - mcp2_temp) > error_allowed):
+                print("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
+                self.guitext.append("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
+                self.guitext.append("I suggest you turn the channels off and try again.")
+                return False
+
+        #finally, if the PC is set to ON, ramp it to the PC voltage
+        if(self.lappd_dict[l]["pc_state"] == 1):
+            pc_temp = self.channel_dict["l"+l+"_pc"]["set_v"]
+            self.mpod.execute_command("outputVoltage", pc_temp, ch_key=self.channel_dict["l"+l+"_pc"]["uid"])
+            #this should take a few seconds based on ramp rate, so wait that many seconds + 5
+            tramp = (pc_temp - mcp1_temp)/float(self.settings["ramp_rate"]) + 4
+            print("Ramping PC to the PC voltage, this will take {} seconds".format(tramp))
+            for i in range(int(tramp)):
+                if(i % 2 == 0):
+                    print("{}...".format(i))
+                time.sleep(1)
+            time.sleep(1)
+        
+            #check the terminal voltages have made it there
+            self.read_terminal_voltages()
+            error_allowed = 5
+            if(abs(self.channel_dict["l"+l+"_pc"]["v_term"] - pc_temp) > error_allowed):
+                print("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
+                self.guitext.append("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
+                self.guitext.append("I suggest you turn the channels off and try again.")
+                return False
+
+        self.guitext.append("All channels ramped to setpoints successfully")
+        self.print_terminal_voltages(l, check=True)
+        return True
+    
     def channels_off(self, l):
+        #first check that the channels are on, if they are not, do nothing, just a repeat click!
+        if(self.are_channels_on(l) == False):
+            return False
+        
+        #reload terminal voltages and use those as a reference for ramping down
+        self.read_terminal_voltages()
+        
+        #Channels are on. So we will establish a ramp down procedure that sequences
+        #the MCPs and PC in order.
+        
+        #first turn the PC off. 
+        self.photocathode_off(l)
+
+        #next ramp to MCP1 and PC to the MCP2 voltage
+        mcp2_temp = self.channel_dict["l"+l+"_mcp2"]["v_term"]
+        mcp1_temp = mcp2_temp
+        pc_temp = mcp2_temp
+        self.mpod.execute_command("outputVoltage", pc_temp, ch_key=self.channel_dict["l"+l+"_pc"]["uid"])
+        self.mpod.execute_command("outputVoltage", mcp1_temp, ch_key=self.channel_dict["l"+l+"_mcp1"]["uid"])
+
+        #this should take a few seconds based on ramp rate, so wait that many seconds + 5
+        tramp = mcp2_temp/float(self.settings["fall_rate"]) + 4 #seconds
+        print("Ramping MCP1 and PC to the MCP2 voltage, this will take {} seconds".format(tramp))
+        for i in range(int(tramp)):
+            if(i % 2 == 0):
+                print("{}...".format(i))
+            time.sleep(1)
+        time.sleep(1)
+
+        #check the terminal voltages have made it there
+        self.read_terminal_voltages()
+        error_allowed = 5 #V
+        for ch in self.channel_dict:
+            lappd = ch.split('_')[0]
+            if(lappd != "l"+l):
+                continue
+            if("mcp2" in ch):
+                continue
+            if(abs(self.channel_dict[ch]["v_term"] - mcp2_temp) > error_allowed):
+                print("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
+                self.guitext.append("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
+                self.guitext.append("I suggest you turn the channels off and try again.")
+                return False
+        
+        #now turn off the channels, which will ramp them all at the same rate to 0V
         for ch in self.channel_dict:
             lappd = ch.split('_')[0]
             if(lappd != "l"+l):
@@ -184,10 +329,22 @@ class LappdControl:
             self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
             self.mpod.execute_command("outputSwitch", 0, ch_key=ch_key)
 
+        return True
+
     def photocathode_on(self, l):
         #check first if the photocathode is already on
         if(self.is_photocathode_on(l)):
             return
+        
+        #check that the terminal voltage of the mcp1 is nonzero
+        if(self.channel_dict["l"+l+"_mcp1"]["v_term"] <= 0): 
+            print("Error: MCP1 terminal voltage is zero or negative, cannot turn on photocathode")
+            return False
+        
+        #finally do a sanity check on setpoints 
+        if(self.check_setpoints_sanity() == False):
+            print("Failed sanity check on setpoints, not turning on photocathode")
+            return False
         
         ch = "l"+l+"_pc"
         ch_key = self.channel_dict[ch]["uid"]
@@ -223,7 +380,9 @@ class LappdControl:
             result = self.mpod.execute_command("outputMeasurementTerminalVoltage", ch_key=self.channel_dict[ch]["uid"])
 
             if(self.settings["debug"]):
-                result = "-123.000000 V"
+                lnum = ch.split('_')[0]
+                vtap = ch.split('_')[1]
+                result = "{:.3f} V".format(self.settings[lnum]["set_v"][vtap])
             
             volt_str = result.split(" ")[-2]
             try:
@@ -233,6 +392,14 @@ class LappdControl:
                 continue
             self.channel_dict[ch]["v_term"] = volts
 
+    def print_terminal_voltages(self, l, check=True):
+        if(check):
+            self.read_terminal_voltages()
+
+        pc = self.channel_dict["l"+l+"_pc"]["v_term"]
+        mcp1 = self.channel_dict["l"+l+"_mcp1"]["v_term"]
+        mcp2 = self.channel_dict["l"+l+"_mcp2"]["v_term"]
+        self.guitext.append("Terminal voltages for LAPPD {}:\t PC {:.0f}V,\t MCP1 {:.0f},\t MCP2 {:.0f}".format(l, pc, mcp1, mcp2))
 
     #THIS IS a critical distinction where you read the setpoint
     #voltages from the machine, rather than "loading" setpoint voltages from our
@@ -243,7 +410,9 @@ class LappdControl:
             result = self.mpod.execute_command("outputVoltage", ch_key=self.channel_dict[ch]["uid"])
 
             if(self.settings["debug"]):
-                result = "-123.000000 V"
+                lnum = ch.split('_')[0]
+                vtap = ch.split('_')[1]
+                result = "{:.3f} V".format(-1*self.settings[lnum]["set_v"][vtap])
             
             volt_str = result.split(" ")[-2]
             try:
@@ -258,7 +427,12 @@ class LappdControl:
             result = self.mpod.execute_command("outputSwitch", ch_key=self.channel_dict[ch]["uid"])
             #assumes result is "on or ff"
             if(self.settings["debug"]):
-                result = "off"
+                if(("state" in self.channel_dict[ch]) == False):
+                    result = "off"
+                elif(self.channel_dict[ch]["state"] == 1):   
+                    result = "on"
+                else:
+                    result = "off"
 
             if("on" in result.lower()):
                 self.channel_dict[ch]["state"] = 1
