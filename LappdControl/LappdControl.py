@@ -39,6 +39,8 @@ class LappdControl:
         for lappd in self.settings['lappds_in_use']:
             self.lappd_dict[lappd] = {}
         self.initialize_crate() #initializes the full stack of channels. also populates self.mpod with MPOD object
+        for lappd in self.settings['lappds_in_use']:
+            self.load_new_setpoints(lappd)
 
         
     def load_settings(self):
@@ -72,7 +74,7 @@ class LappdControl:
         #Evan believes that the crate can be in the "off" state 
         #without the user knowing. And this "off" state is not
         #whether the channel are outputting voltage. Turn the crate on. 
-        mpod.execute_command('sysMainSwitch', 1)      
+        #mpod.execute_command('sysMainSwitch', 1)      
 
         #Let's add software channels to the module that represent
         #(1) a photocathode channel
@@ -172,7 +174,7 @@ class LappdControl:
     
     def set_current_limits_and_ramp_rates(self, l):
         #first load the settings file again
-        self.load_settings()
+#        self.load_settings()
 
         #the ramp rate is a global variable for all channels, and the manual
         #thinks that you set one channel and it sets it for all. though we 
@@ -193,7 +195,6 @@ class LappdControl:
             self.mpod.set_current_limit(ch_key, max_i)
 
 
-
     #Turns channels on for a given LAPPD, 
     #ramping them to their setpoint voltages. 
     def channels_on(self, l):
@@ -201,23 +202,34 @@ class LappdControl:
         if(self.are_channels_on(l)):
             return False
         
+        self.set_current_limits_and_ramp_rates(l)
+
         #Channels are off. So we will establish a ramp up procedure that sequences
-        #the MCPs and PC in order. 
+        #the MCPs and PC in order.
+        print(self.channel_dict)
+ 
         mcp2_temp = self.channel_dict["l"+l+"_mcp2"]["set_v"]
         mcp1_temp = mcp2_temp
-        pc_temp = mcp2_temp
+        pc_temp = mcp2_temp + float(self.settings["pc_off_bias"])
 
         #first ramp to the mcp2 voltage for all terminals
         self.mpod.execute_command("outputVoltage", mcp2_temp, ch_key=self.channel_dict["l"+l+"_mcp2"]["uid"])
         self.mpod.execute_command("outputVoltage", mcp1_temp, ch_key=self.channel_dict["l"+l+"_mcp1"]["uid"])
         self.mpod.execute_command("outputVoltage", pc_temp, ch_key=self.channel_dict["l"+l+"_pc"]["uid"])
-        for ch in self.channel_dict:
-            lappd = ch.split('_')[0]
-            if(lappd != "l"+l):
-                continue
-            ch_key = self.channel_dict[ch]["uid"]
-            self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
-            self.mpod.execute_command("outputSwitch", 1, ch_key=ch_key)
+        #for ch in self.channel_dict:
+        #    lappd = ch.split('_')[0]
+        #    if(lappd != "l"+l):
+        #        continue
+        #    ch_key = self.channel_dict[ch]["uid"]
+        #    self.mpod.execute_command("outputSwitch", 10, ch_key=ch_key)
+        #    self.mpod.execute_command("outputSwitch", 1, ch_key=ch_key)
+        self.mpod.execute_command("outputSwitch", 10, ch_key=self.channel_dict["l"+l+"_mcp2"]["uid"])
+        self.mpod.execute_command("outputSwitch", 10, ch_key=self.channel_dict["l"+l+"_mcp1"]["uid"])
+        self.mpod.execute_command("outputSwitch", 10, ch_key=self.channel_dict["l"+l+"_pc"]["uid"])
+        self.mpod.execute_command("outputSwitch", 1,  ch_key=self.channel_dict["l"+l+"_mcp2"]["uid"])
+        self.mpod.execute_command("outputSwitch", 1,  ch_key=self.channel_dict["l"+l+"_mcp1"]["uid"])
+        self.mpod.execute_command("outputSwitch", 1,  ch_key=self.channel_dict["l"+l+"_pc"]["uid"])
+        
 
         #this should take a few seconds based on ramp rate, so wait that many seconds + 5
         tramp = mcp2_temp/float(self.settings["ramp_rate"]) + 4 #seconds
@@ -243,7 +255,7 @@ class LappdControl:
             
         #now ramp the other two to mcp1 
         mcp1_temp = self.channel_dict["l"+l+"_mcp1"]["set_v"]
-        pc_temp = mcp1_temp
+        pc_temp = mcp1_temp + float(self.settings["pc_off_bias"])
         self.mpod.execute_command("outputVoltage", mcp1_temp, ch_key=self.channel_dict["l"+l+"_mcp1"]["uid"])
         self.mpod.execute_command("outputVoltage", pc_temp, ch_key=self.channel_dict["l"+l+"_pc"]["uid"])
         #this should take a few seconds based on ramp rate, so wait that many seconds + 5
@@ -310,10 +322,12 @@ class LappdControl:
         #first turn the PC off. 
         self.photocathode_off(l)
 
+        self.set_current_limits_and_ramp_rates(l)
+
         #next ramp to MCP1 and PC to the MCP2 voltage
         mcp2_temp = self.channel_dict["l"+l+"_mcp2"]["v_term"]
         mcp1_temp = mcp2_temp
-        pc_temp = mcp2_temp
+        pc_temp = mcp2_temp + float(self.settings["pc_off_bias"])
         self.mpod.execute_command("outputVoltage", pc_temp, ch_key=self.channel_dict["l"+l+"_pc"]["uid"])
         self.mpod.execute_command("outputVoltage", mcp1_temp, ch_key=self.channel_dict["l"+l+"_mcp1"]["uid"])
 
@@ -356,6 +370,11 @@ class LappdControl:
         #check first if the photocathode is already on
         if(self.is_photocathode_on(l)):
             return True
+
+        self.set_current_limits_and_ramp_rates(l)
+        #set special slow ramp rate for photocathode ramp 
+        example_ch = list(self.channel_dict.keys())[0]
+        self.mpod.set_ramp_rate(self.channel_dict[example_ch]["uid"], -1*abs(1.0))
         
         #check that the terminal voltage of the mcp1 is nonzero
         if(self.channel_dict["l"+l+"_mcp1"]["v_term"] <= 0): 
@@ -370,11 +389,20 @@ class LappdControl:
         ch = "l"+l+"_pc"
         ch_key = self.channel_dict[ch]["uid"]
         #raise the setpoint to the photocathode voltage from the settings file
-        self.load_settings()
+        #self.load_settings()
         setp = float(self.settings["l"+l]["set_v"]["pc"])
         self.mpod.execute_command("outputVoltage", setp, ch_key=ch_key)
         self.channel_dict[ch]["set_v"] = setp
         self.lappd_dict[l]["pc_state"] = 1
+
+        tramp = (self.settings["l"+l]["set_v"]["pc"] - self.settings["l"+l]["set_v"]["mcp1"])/1 + 4
+        print("Ramping PC to active voltage, this will take {} seconds".format(tramp))
+        for i in range(int(tramp)):
+            if(i % 2 == 0):
+                print("{}...".format(i))
+            time.sleep(1)
+        time.sleep(1)
+
         return True
 
 
@@ -383,15 +411,26 @@ class LappdControl:
         if(self.is_photocathode_on(l) == False):
             return True
 
+        self.set_current_limits_and_ramp_rates(l)
+
         ch = "l"+l+"_pc"
         ch_key = self.channel_dict[ch]["uid"]
         #lower the setpoint to the MCP1 voltage from the settings file
         #MINUS some small negative bias of -0.5V
-        self.load_settings()
+        #self.load_settings()
         setp = float(self.settings["l"+l]["set_v"]["mcp1"]) + float(self.settings["pc_off_bias"]) #This number is negative in the config file
         self.mpod.execute_command("outputVoltage", setp, ch_key=ch_key)
         self.channel_dict[ch]["set_v"] = setp
         self.lappd_dict[l]["pc_state"] = 0
+
+        tramp = (self.settings["l"+l]["set_v"]["pc"] - self.settings["l"+l]["set_v"]["mcp1"])/float(self.settings["ramp_rate"]) + 4 #seconds
+        print("Ramping PC to active voltage, this will take {} seconds".format(tramp))
+        for i in range(int(tramp)):
+            if(i % 2 == 0):
+                print("{}...".format(i))
+            time.sleep(1)
+        time.sleep(1)
+
         return True
 
     def emergency_off(self):
