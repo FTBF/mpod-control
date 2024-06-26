@@ -87,15 +87,12 @@ class LappdControl:
             lnum = "l"+lappds_in_use[lappd_count] #string, identifier of LAPPD number that matches the yaml config
             max_i = s[lnum]['max_i'] #dictionary of max currents for each channel
             if(ch % 3 == 0):
-                mpod.add_channel(ch, max_current=float(max_i['pc']), ramp_rate=float(s["ramp_rate"]), fall_rate=float(s["fall_rate"]))
                 self.channel_dict['{}_pc'.format(lnum)] = {}
                 self.channel_dict['{}_pc'.format(lnum)]["uid"] = 'u{:d}'.format(mn) + str(ch).zfill(2)
             elif(ch % 3 == 1):
-                mpod.add_channel(ch, max_current=float(max_i['mcp1']), ramp_rate=float(s["ramp_rate"]), fall_rate=float(s["fall_rate"]))
                 self.channel_dict['{}_mcp1'.format(lnum)] = {}
                 self.channel_dict['{}_mcp1'.format(lnum)]["uid"] = 'u{:d}'.format(mn) + str(ch).zfill(2)
             else:
-                mpod.add_channel(ch, max_current=float(max_i['mcp2']), ramp_rate=float(s["ramp_rate"]), fall_rate=float(s["fall_rate"]))
                 self.channel_dict['{}_mcp2'.format(lnum)] = {}
                 self.channel_dict['{}_mcp2'.format(lnum)]["uid"] = 'u{:d}'.format(mn) + str(ch).zfill(2)
                 lappd_count +=1
@@ -172,6 +169,30 @@ class LappdControl:
                 self.channel_dict[ch]["set_v"] = setp
         
         return True
+    
+    def set_current_limits_and_ramp_rates(self, l):
+        #first load the settings file again
+        self.load_settings()
+
+        #the ramp rate is a global variable for all channels, and the manual
+        #thinks that you set one channel and it sets it for all. though we 
+        #may be having trouble with that functionality being actually programmed
+        #onto the module. Takes a negative voltage / sec value
+        example_ch = list(self.channel_dict.keys())[0]
+        self.mpod.set_ramp_rate(self.channel_dict[example_ch]["uid"], -1*abs(float(self.settings["ramp_rate"])))
+
+        #then update the current limits for each channel. 
+        for ch in self.channel_dict:
+            lappd = ch.split('_')[0]
+            if(lappd != "l"+l):
+                continue
+            vtap = ch.split('_')[1]
+            ch_key = self.channel_dict[ch]["uid"]
+            max_i = float(self.settings[lappd]["max_i"][vtap])
+
+            self.mpod.set_current_limit(ch_key, max_i)
+
+
 
     #Turns channels on for a given LAPPD, 
     #ramping them to their setpoint voltages. 
@@ -243,7 +264,7 @@ class LappdControl:
                 continue
             if("mcp2" in ch):
                 continue
-            if(abs(self.channel_dict[ch]["v_term"] - mcp2_temp) > error_allowed):
+            if(abs(self.channel_dict[ch]["v_term"] - mcp1_temp) > error_allowed):
                 print("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
                 self.guitext.append("Error: terminal voltage did not reach setpoint for channel {}. Check the browser readout GUI!".format(ch))
                 self.guitext.append("I suggest you turn the channels off and try again.")
@@ -297,7 +318,7 @@ class LappdControl:
         self.mpod.execute_command("outputVoltage", mcp1_temp, ch_key=self.channel_dict["l"+l+"_mcp1"]["uid"])
 
         #this should take a few seconds based on ramp rate, so wait that many seconds + 5
-        tramp = mcp2_temp/float(self.settings["fall_rate"]) + 4 #seconds
+        tramp = (self.channel_dict["l"+l+"_mcp1"]["v_term"] - mcp2_temp)/float(self.settings["ramp_rate"]) + 4 #seconds
         print("Ramping MCP1 and PC to the MCP2 voltage, this will take {} seconds".format(tramp))
         for i in range(int(tramp)):
             if(i % 2 == 0):
@@ -334,7 +355,7 @@ class LappdControl:
     def photocathode_on(self, l):
         #check first if the photocathode is already on
         if(self.is_photocathode_on(l)):
-            return
+            return True
         
         #check that the terminal voltage of the mcp1 is nonzero
         if(self.channel_dict["l"+l+"_mcp1"]["v_term"] <= 0): 
@@ -354,12 +375,13 @@ class LappdControl:
         self.mpod.execute_command("outputVoltage", setp, ch_key=ch_key)
         self.channel_dict[ch]["set_v"] = setp
         self.lappd_dict[l]["pc_state"] = 1
+        return True
 
 
     def photocathode_off(self, l):
         #check first if the photocathode is already off
         if(self.is_photocathode_on(l) == False):
-            return
+            return True
 
         ch = "l"+l+"_pc"
         ch_key = self.channel_dict[ch]["uid"]
@@ -370,6 +392,7 @@ class LappdControl:
         self.mpod.execute_command("outputVoltage", setp, ch_key=ch_key)
         self.channel_dict[ch]["set_v"] = setp
         self.lappd_dict[l]["pc_state"] = 0
+        return True
 
     def emergency_off(self):
         self.mpod.execute_command("sysMainSwitch", 0)
@@ -378,12 +401,7 @@ class LappdControl:
     def read_terminal_voltages(self):
         for ch in self.channel_dict:
             result = self.mpod.execute_command("outputMeasurementTerminalVoltage", ch_key=self.channel_dict[ch]["uid"])
-
-            if(self.settings["debug"]):
-                lnum = ch.split('_')[0]
-                vtap = ch.split('_')[1]
-                result = "{:.3f} V".format(self.settings[lnum]["set_v"][vtap])
-            
+       
             volt_str = result.split(" ")[-2]
             try:
                 volts = abs(float(volt_str)) #we absolute value because in software we will work with positives only
@@ -408,11 +426,6 @@ class LappdControl:
     def read_setpoint_voltages(self):
         for ch in self.channel_dict:
             result = self.mpod.execute_command("outputVoltage", ch_key=self.channel_dict[ch]["uid"])
-
-            if(self.settings["debug"]):
-                lnum = ch.split('_')[0]
-                vtap = ch.split('_')[1]
-                result = "{:.3f} V".format(-1*self.settings[lnum]["set_v"][vtap])
             
             volt_str = result.split(" ")[-2]
             try:
@@ -425,14 +438,6 @@ class LappdControl:
     def read_switch_states(self):
         for ch in self.channel_dict:
             result = self.mpod.execute_command("outputSwitch", ch_key=self.channel_dict[ch]["uid"])
-            #assumes result is "on or ff"
-            if(self.settings["debug"]):
-                if(("state" in self.channel_dict[ch]) == False):
-                    result = "off"
-                elif(self.channel_dict[ch]["state"] == 1):   
-                    result = "on"
-                else:
-                    result = "off"
 
             if("on" in result.lower()):
                 self.channel_dict[ch]["state"] = 1

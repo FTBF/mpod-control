@@ -1,10 +1,9 @@
 ip: '192.168.46.50' #crate IP address
 crate_path: /home/nfs/pastika/Downloads/net-snmp-5.9.4/mibs #path to the crate MIBs
 snmp_path: /home/nfs/pastika/Downloads/net-snmp-5.9.4/apps #path to the snmp commands
-ramp_rate: 10 #V/s global ramp and deramp rates
-fall_rate: 50 #V/s global fall rate
+ramp_rate: 30 #V/s global ramp and deramp rates. it will apply the "-1" in the program, so this number can be positive. 
 lappds_in_use: ['86','157'] #labels for the LAPPDs in use, referencing the settings below
-debug: True #debug mode for the python program, will only print commands, not execute (for now)
+debug: False #debug mode for the python program, will only print commands, not execute (for now)
 #when the photocathode is set to "off", we reverse bias it relative to the MCP1 
 #as even with very small voltages, it is easy to get some photoelectrons. 
 pc_off_bias: -0.5 #Volts

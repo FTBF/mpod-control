@@ -1,0 +1,24 @@
+u100:
+  outputMeasurementTerminalVoltage: -2150.0
+  outputSwitch: 1
+  outputVoltage: 2150.0
+u101:
+  outputMeasurementTerminalVoltage: -2100.0
+  outputSwitch: 1
+  outputVoltage: 2100.0
+u102:
+  outputMeasurementTerminalVoltage: -1050.0
+  outputSwitch: 1
+  outputVoltage: 1050.0
+u103:
+  outputMeasurementTerminalVoltage: -2099.5
+  outputSwitch: 1
+  outputVoltage: 2099.5
+u104:
+  outputMeasurementTerminalVoltage: -2100.0
+  outputSwitch: 1
+  outputVoltage: 2100.0
+u105:
+  outputMeasurementTerminalVoltage: -1050.0
+  outputSwitch: 1
+  outputVoltage: 1050.0

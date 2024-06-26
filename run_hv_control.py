@@ -22,7 +22,7 @@ class HVControlGUI(QWidget):
         self.pc_on_buttons = {}
         self.pc_off_buttons = {}
         self.load_setpoints_buttons = {}
-        self.ch_status_buttons = {}
+        self.current_lim_buttons = {}
         offset = 3 #how many columns dedicated for each LAPPD
         for i, l in enumerate(lnums):
             self.layout.addWidget(QLabel("LAPPD {}".format(l)), 0, 0 + i*offset)
@@ -41,9 +41,9 @@ class HVControlGUI(QWidget):
             self.load_setpoints_buttons[l] = QPushButton("Load New Setpoints")
             self.load_setpoints_buttons[l].clicked.connect(lambda _, x=l: self.load_new_setpoints(x))
             self.layout.addWidget(self.load_setpoints_buttons[l], 3, 0 + i*offset)
-            #self.ch_status_buttons[l] = QPushButton("Read Channels")
-            #self.ch_status_buttons[l].clicked.connect(lambda _, x=l: self.read_channels(x))
-            #self.layout.addWidget(self.ch_status_buttons[l], 3, 1 + i*offset)
+            self.current_lim_buttons[l] = QPushButton("Set current lims/ramp rates")
+            self.current_lim_buttons[l].clicked.connect(lambda _, x=l: self.set_current_limits_and_ramp_rates(x))   
+            self.layout.addWidget(self.current_lim_buttons[l], 3, 1 + i*offset)
             self.layout.addItem(QSpacerItem(80, 40, QSizePolicy.Minimum, QSizePolicy.Expanding),0, 2 + i*offset)
             
 
@@ -141,8 +141,9 @@ class HVControlGUI(QWidget):
 
     #reads all of the data that we want to display on the GUI
     #such as channel on/off status, setpoint voltages, and terminal voltages
-    def read_channels(self, l):
-        pass
+    def set_current_limits_and_ramp_rates(self, l):
+        self.lc.set_current_limits_and_ramp_rates(l)
+        self.text_output.append("Current limits and ramp rates set for LAPPD {}".format(l))
 
 
 if __name__ == "__main__":
